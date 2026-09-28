@@ -1,0 +1,23 @@
+name: Mac mini deployment checks
+
+on:
+  push:
+    paths:
+      - 'deploy/mac-mini/**'
+      - '.github/workflows/mac-mini-deploy-check.yml'
+  pull_request:
+    paths:
+      - 'deploy/mac-mini/**'
+      - '.github/workflows/mac-mini-deploy-check.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell scripts
+        run: sh -n deploy/mac-mini/*.sh
+      - name: Validate Compose configuration
+        run: docker compose --env-file deploy/mac-mini/.env.example -f deploy/mac-mini/compose.yaml config --quiet
+      - name: Test duplicate-publish protection
+        run: python3 -m unittest discover -s deploy/mac-mini/bridge -p 'test_*.py'
