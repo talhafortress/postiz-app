@@ -1,0 +1,137 @@
+name: postiz-mac-mini
+
+services:
+  postiz:
+    image: ghcr.io/gitroomhq/postiz-app:v2.24.0
+    restart: unless-stopped
+    init: true
+    ports:
+      - '127.0.0.1:4007:5000'
+    environment:
+      MAIN_URL: https://${POSTIZ_DOMAIN}
+      FRONTEND_URL: https://${POSTIZ_DOMAIN}
+      NEXT_PUBLIC_BACKEND_URL: https://${POSTIZ_DOMAIN}/api
+      BACKEND_INTERNAL_URL: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET:?Run ./init.sh first}
+      DATABASE_URL: postgresql://postiz:${POSTIZ_DB_PASSWORD:?Run ./init.sh first}@postiz-db:5432/postiz
+      REDIS_URL: redis://redis:6379
+      TEMPORAL_ADDRESS: temporal:7233
+      IS_GENERAL: 'true'
+      DISABLE_REGISTRATION: ${DISABLE_REGISTRATION:-true}
+      STORAGE_PROVIDER: local
+      UPLOAD_DIRECTORY: /uploads
+      NEXT_PUBLIC_UPLOAD_DIRECTORY: /uploads
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      TIKTOK_CLIENT_ID: ${TIKTOK_CLIENT_ID:-}
+      TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+      API_LIMIT: ${API_LIMIT:-30}
+    volumes:
+      - postiz_config:/config
+      - postiz_uploads:/uploads
+    depends_on:
+      postiz-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:5000/api/monitor/queue/default').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+    networks: [internal]
+
+  postiz-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postiz
+      POSTGRES_USER: postiz
+      POSTGRES_PASSWORD: ${POSTIZ_DB_PASSWORD:?Run ./init.sh first}
+    volumes:
+      - postiz_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postiz -d postiz']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  temporal-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:?Run ./init.sh first}
+    volumes:
+      - temporal_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U temporal']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  temporal-search:
+    image: elasticsearch:7.17.27
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'false'
+      ES_JAVA_OPTS: -Xms256m -Xmx256m
+    volumes:
+      - temporal_search:/usr/share/elasticsearch/data
+    networks: [internal]
+
+  temporal:
+    image: temporalio/auto-setup:1.28.1
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: '5432'
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?Run ./init.sh first}
+      POSTGRES_SEEDS: temporal-db
+      ENABLE_ES: 'true'
+      ES_SEEDS: temporal-search
+      ES_VERSION: v7
+      TEMPORAL_NAMESPACE: default
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    volumes:
+      - ../../dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+      temporal-search:
+        condition: service_started
+    networks: [internal]
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postiz_config:
+  postiz_uploads:
+  postiz_db:
+  redis_data:
+  temporal_db:
+  temporal_search:
