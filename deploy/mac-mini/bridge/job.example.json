@@ -1,0 +1,11 @@
+{
+  "id": "my-system-video-2026-09-28-001",
+  "media_path": "/absolute/path/to/video.mp4",
+  "caption": "Example caption",
+  "mode": "draft",
+  "integrations": [
+    { "id": "instagram-integration-id", "settings": {} },
+    { "id": "tiktok-integration-id", "settings": {} },
+    { "id": "youtube-integration-id", "settings": {} }
+  ]
+}

@@ -25,7 +25,7 @@ changed later, build and pin an image from this fork before deploying those chan
    Create the admin user, set the value back to `true`, and run the same compose
    command again to recreate the app with registration closed.
 4. Run `./check.sh`. Confirm that the HTTPS hostname serves the app and that
-   uploaded media under `/uploads/` is reachable from outside your network.
+   a small uploaded test file is reachable from outside your network.
 5. Add platform credentials to `.env` and recreate the app. Configure each
    provider's redirect URI for the same HTTPS hostname, then connect one test
    account and publish a private/test item per platform before production use.
@@ -35,6 +35,20 @@ Elasticsearch and Temporal are reachable only on the internal Docker network.
 Do not put Cloudflare Access in front of the entire hostname: OAuth callbacks
 and platforms fetching `/uploads/` would be blocked. Restrict app access with
 Postiz accounts, and add path-aware Cloudflare rules only after testing.
+
+### Large videos
+
+Cloudflare's proxied Free/Pro route accepts at most **100 MB per upload**.
+Run the bridge on the Mac mini with `POSTIZ_API_URL=http://127.0.0.1:4007/api`
+for large video uploads, or move files to the Mac via a private transfer first.
+The generated public media URL still uses `FRONTEND_URL` so social platforms
+can fetch it. Cloudflare also states that video delivery through a public
+Tunnel on Free/Pro/Business requires an eligible paid video service. For a
+production workflow with large videos, configure Postiz's R2 storage option
+and a public R2 custom domain (set `STORAGE_PROVIDER=cloudflare` and the
+`CLOUDFLARE_*` values in `.env`), or choose another compliant media delivery
+architecture before relying on the tunnel for media. Keep the Tunnel for UI,
+API callbacks and small requests. Test provider fetches with a real video.
 
 ## Reliability and recovery
 
@@ -61,7 +75,7 @@ Postiz accounts, and add path-aware Cloudflare rules only after testing.
 
 The existing Postiz public API can accept uploaded media and create/schedule
 posts. Integrate via API key and the public HTTPS base URL, with a durable job
-queue on the calling side. Store one job ID per source item and destination;
+queue on the calling side. Store one job ID per source item and destination set;
 retry transient failures with backoff, but check whether a post was already
 created before retrying so a timeout does not publish a duplicate. Reconcile
 scheduled/published status rather than assuming an accepted API call means a
@@ -69,9 +83,25 @@ platform published the media. Platform specific media requirements and review
 status must be checked before dispatch. The exact adapter depends on the
 existing application's API, storage and event flow.
 
+`bridge/submit.py` is a small, dependency-free starting adapter. It streams a
+local file to Postiz, then creates one multi-destination post request. Copy
+`bridge/job.example.json`, replace media path and connected integration IDs,
+and set `POSTIZ_API_URL=http://127.0.0.1:4007/api` and `POSTIZ_API_KEY` in the
+calling process. Run `python3 bridge/submit.py job.json bridge-state.sqlite`.
+The default mode is **draft** for review. `now` and `schedule` require each
+platform's valid `settings`; for schedule also provide an ISO 8601 `date`.
+Get integration IDs from Postiz's `GET /api/public/v1/integrations` endpoint.
+The state database prevents a successful job from being submitted again. If
+Postiz's response is lost or only some destinations are confirmed, the adapter
+marks the job uncertain and refuses automatic retry; inspect Postiz first.
+An API acceptance still needs a later publication-status check. Keep the API
+key and state database out of Git and back up the state database separately.
+
 ## Links
 
 - [Postiz self-hosting documentation](https://docs.postiz.com/self-host/installation/system-requirements)
 - [Postiz uploads and public media](https://docs.postiz.com/self-host/configuration/uploads)
 - [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/get-started/)
+- [Cloudflare upload limits](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits)
+- [Cloudflare Tunnel video delivery terms](https://developers.cloudflare.com/tunnel/concepts/routing/#published-applications)
 - [Postiz public API](https://docs.postiz.com/public-api)
