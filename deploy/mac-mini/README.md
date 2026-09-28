@@ -1,6 +1,6 @@
 # Mac mini deployment
 
-This bundle uses the upstream Postiz **v2.24.0** ARM64 image, with the existing UI,
+This bundle uses the upstream Postiz **v2.24.0** ARM64 image pinned by digest, with the existing UI,
 OAuth connection screens, publishing workers, public API, PostgreSQL, Redis and
 Temporal. It is a deployment baseline for this fork. If application code is
 changed later, build and pin an image from this fork before deploying those changes.
@@ -15,7 +15,10 @@ changed later, build and pin an image from this fork before deploying those chan
 
 ## Install
 
-1. In this directory run `chmod +x init.sh backup.sh check.sh` and
+1. On the Mac mini, clone
+   `https://github.com/talhafortress/postiz-app.git` and check out the
+   `codex/mac-mini-deployment` branch. In this directory run
+   `chmod +x init.sh backup.sh check.sh` and
    `./init.sh postiz.example.org`, using your actual hostname.
 2. In Cloudflare Zero Trust, create a named Tunnel for the Mac and route that
    hostname to `http://localhost:4007`. Install `cloudflared` as a macOS service
@@ -53,7 +56,7 @@ API callbacks and small requests. Test provider fetches with a real video.
 ## Reliability and recovery
 
 - Services restart after crashes; state is kept in named volumes. Pinning the
-  app version avoids unattended changes. Docker Desktop must start at login.
+  app image digest avoids unattended app changes. Docker Desktop must start at login.
 - Run `./backup.sh` during a maintenance window. It stops the stack briefly to
   capture a consistent archive of all six data volumes, checks the archive, then
   starts the stack. Keep the resulting archive **and `.env`** in encrypted
@@ -62,7 +65,7 @@ API callbacks and small requests. Test provider fetches with a real video.
   creating the same volumes, stopping the stack, extracting the archive into
   those volumes, restoring `.env`, and starting the stack. Do not overwrite a
   live installation as a test.
-- Before an update, take a backup, change the pinned image tag only after
+- Before an update, take a backup, change the pinned image tag and digest only after
   reviewing release notes and security advisories, then run `docker compose
   --env-file .env -f compose.yaml pull` and `docker compose --env-file .env
   -f compose.yaml up -d`. Run `./check.sh` and one draft/test post afterward.
